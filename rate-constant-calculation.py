@@ -1,120 +1,114 @@
 import streamlit as st
 import numpy as np
 import matplotlib.pyplot as plt
+from sklearn.metrics import r2_score
+
+# 1. Page Config & CSS to hide Streamlit branding
+st.set_page_config(page_title="Reaction Order Predictor", layout="wide")
+
+hide_style = """
+    <style>
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+    </style>
+    """
+st.markdown(hide_style, unsafe_base64=True)
+
+def calculate_r2(x, y):
+    """Calculates R-squared value."""
+    if len(x) < 2: return 0
+    # Linear regression: y = mx + c
+    coefficients = np.polyfit(x, y, 1)
+    p = np.poly1d(coefficients)
+    y_pred = p(x)
+    return r2_score(y, y_pred)
 
 def main():
-    # Page Configuration
-    st.set_page_config(page_title="Chemical Kinetics Calculator", page_icon="🧪")
+    st.title("🧪 Kinetic Best-Fit Calculator")
+    st.write("Input your experimental data below. The app will automatically determine the reaction order.")
 
-    st.title("🧪 Rate Constant ($k$) Calculator")
-    st.markdown("""
-    This application calculates the rate constant **($k$)** using **Integrated Rate Equations**.
-    Select your reaction order from the sidebar to begin.
-    """)
-
-    # --- Sidebar Configuration ---
-    st.sidebar.header("Reaction Parameters")
-    order = st.sidebar.selectbox(
-        "Select Reaction Order",
-        ("Zeroth Order", "First Order", "Second Order")
-    )
-
-    # --- Input Section ---
-    st.subheader(f"Input Data for {order}")
+    # --- Data Input Section ---
+    st.subheader("Step 1: Enter Experimental Data")
     
-    col1, col2, col3 = st.columns(3)
-    
+    # Prefilled data (Example: A typical First Order decay)
+    default_time = "0, 10, 20, 30, 40, 50"
+    default_conc = "1.0, 0.707, 0.5, 0.354, 0.25, 0.177"
+
+    col1, col2 = st.columns(2)
     with col1:
-        a0 = st.number_input("Initial Conc. $[A]_0$ (M)", min_value=0.0001, value=1.0, format="%.4f")
-    
+        time_str = st.text_input("Time points (comma separated)", default_time)
     with col2:
-        at = st.number_input("Final Conc. $[A]_t$ (M)", min_value=0.0000, value=0.5, format="%.4f")
-        
-    with col3:
-        t = st.number_input("Time elapsed $t$ (seconds)", min_value=0.0001, value=10.0, format="%.2f")
+        conc_str = st.text_input("Concentrations [A] (comma separated)", default_conc)
 
-    # --- Logic & Calculation ---
-    st.markdown("---")
-    st.subheader("Calculation & Results")
+    try:
+        # Convert strings to numpy arrays
+        t = np.array([float(i.strip()) for i in time_str.split(",")])
+        a = np.array([float(i.strip()) for i in conc_str.split(",")])
 
-    # Initialize k
-    k = 0.0
-    valid_calculation = True
+        if len(t) != len(a):
+            st.error("Error: Time and Concentration arrays must be the same length.")
+            return
 
-    # 1. Zeroth Order Logic
-    if order == "Zeroth Order":
-        st.info("For a Zeroth Order reaction, the rate is independent of concentration.")
-        st.latex(r"k = \frac{[A]_0 - [A]_t}{t}")
+        # --- Kinetic Transformations ---
+        # Zeroth: [A] vs t
+        r2_zero = calculate_r2(t, a)
         
-        if st.button("Calculate k"):
-            k = (a0 - at) / t
-            units = "M/s"
+        # First: ln[A] vs t
+        r2_first = calculate_r2(t, np.log(a))
+        
+        # Second: 1/[A] vs t
+        r2_second = calculate_r2(t, 1/a)
 
-    # 2. First Order Logic
-    elif order == "First Order":
-        st.info("For a First Order reaction, the rate depends linearly on concentration.")
-        st.latex(r"k = \frac{1}{t} \ln\left(\frac{[A]_0}{[A]_t}\right)")
-        
-        if st.button("Calculate k"):
-            if at <= 0:
-                st.error("Final concentration must be > 0 for Logarithmic calculation.")
-                valid_calculation = False
-            else:
-                k = (1/t) * np.log(a0 / at)
-                units = "1/s"
+        # --- Determine Best Fit ---
+        results = {
+            "Zeroth Order ([A] vs t)": r2_zero,
+            "First Order (ln[A] vs t)": r2_first,
+            "Second Order (1/[A] vs t)": r2_second
+        }
+        best_order = max(results, key=results.get)
 
-    # 3. Second Order Logic
-    elif order == "Second Order":
-        st.info("For a Second Order reaction, the rate depends on the square of the concentration.")
-        st.latex(r"k = \frac{1}{t} \left( \frac{1}{[A]_t} - \frac{1}{[A]_0} \right)")
+        # --- Results Display ---
+        st.markdown("---")
+        st.subheader("Step 2: Statistical Analysis ($R^2$)")
         
-        if st.button("Calculate k"):
-            if at <= 0:
-                st.error("Final concentration must be > 0 for inverse calculation.")
-                valid_calculation = False
-            else:
-                k = (1/t) * ((1/at) - (1/a0))
-                units = "1/(M·s)"
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Zeroth Order $R^2$", f"{r2_zero:.4f}")
+        c2.metric("First Order $R^2$", f"{r2_first:.4f}")
+        c3.metric("Second Order $R^2$", f"{r2_second:.4f}")
 
-    # --- Display Results ---
-    if valid_calculation and k != 0:
-        st.success(f"The calculated Rate Constant is:")
-        st.metric(label="Rate Constant (k)", value=f"{k:.5f} {units}")
-        
-        # --- Visualization (Optional but helpful) ---
-        st.subheader("Concentration Decay Plot")
-        
-        # Generate time points for the graph (from 0 to 1.5x the input time)
-        t_plot = np.linspace(0, t * 1.5, 100)
-        
-        # Calculate concentration over time based on the derived k
-        y_plot = []
-        
-        if order == "Zeroth Order":
-            # [A]t = [A]0 - kt
-            y_plot = a0 - (k * t_plot)
-            # Filter out negative concentrations for the graph
-            y_plot = [y if y > 0 else 0 for y in y_plot] 
-            
-        elif order == "First Order":
-            # [A]t = [A]0 * e^(-kt)
-            y_plot = a0 * np.exp(-k * t_plot)
-            
-        elif order == "Second Order":
-            # 1/[A]t = kt + 1/[A]0  ->  [A]t = 1 / (kt + 1/[A]0)
-            y_plot = 1 / ((k * t_plot) + (1/a0))
+        st.success(f"**Conclusion:** The data best fits a **{best_order}** kinetics model.")
 
-        # Plotting
-        fig, ax = plt.subplots()
-        ax.plot(t_plot, y_plot, label=f'{order} Decay', color='teal', linewidth=2)
-        ax.scatter([t], [at], color='red', zorder=5, label='Measured Point') # Show the user's input point
-        ax.set_xlabel("Time (s)")
-        ax.set_ylabel("Concentration [A] (M)")
-        ax.set_title(f"Reaction Progress ($k={k:.4f}$)")
+        # --- Visualizing the Best Fit ---
+        st.markdown("---")
+        st.subheader("Step 3: Best Fit Visualization")
+        
+        fig, ax = plt.subplots(figsize=(10, 4))
+        
+        if best_order.startswith("Zeroth"):
+            y_plot = a
+            label_y = "Concentration [A]"
+        elif best_order.startswith("First"):
+            y_plot = np.log(a)
+            label_y = "ln([A])"
+        else:
+            y_plot = 1/a
+            label_y = "1/[A]"
+
+        # Plot points and regression line
+        m, b = np.polyfit(t, y_plot, 1)
+        ax.scatter(t, y_plot, color='red', label='Experimental Data')
+        ax.plot(t, m*t + b, color='blue', linestyle='--', label=f'Linear Fit (k={abs(m):.4f})')
+        
+        ax.set_xlabel("Time")
+        ax.set_ylabel(label_y)
         ax.legend()
-        ax.grid(True, linestyle='--', alpha=0.6)
+        ax.grid(alpha=0.3)
         
         st.pyplot(fig)
+
+    except Exception as e:
+        st.warning("Please ensure your inputs are numbers separated by commas.")
 
 if __name__ == "__main__":
     main()
