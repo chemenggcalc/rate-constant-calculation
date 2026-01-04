@@ -26,7 +26,7 @@ modern_css = """
     /* Modern Title Styling */
     .main-title {
         font-size: 28px !important;
-        font-weight: 700;
+        font-weight: 800;
         color: #1E293B;
         margin-bottom: 10px;
         text-align: center;
@@ -42,7 +42,7 @@ modern_css = """
     /* Card Styling for Inputs and Results */
     div.stTextInput, div.stMetric, .stPlotlyChart {
         background-color: #ffffff;
-        padding: 15px;
+        padding: 14px;
         border-radius: 12px;
         box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
     }
@@ -62,7 +62,7 @@ modern_css = """
 
     /* Adjust block container padding for embedding */
     .block-container {
-        padding-top: 1.5rem;
+        padding-top: 1.3rem;
         max-width: 900px;
     }
     </style>
@@ -108,7 +108,7 @@ def main():
         r2_second = calculate_r2(t, 1/a)
 
         # --- Step 2: Metrics ---
-        st.markdown("### Regression Analysis ($R^2$)")
+        st.markdown("#### Regression Analysis ($R^2$)")
         m1, m2, m3 = st.columns(3)
         m1.metric("Zeroth Order", f"{r2_zero:.4f}")
         m2.metric("First Order", f"{r2_first:.4f}")
