@@ -5,19 +5,21 @@ import plotly.express as px
 from scipy.stats import linregress
 
 # --- 1. PAGE CONFIGURATION ---
+# Fixed: Added 'initial_sidebar_state="expanded"' so input is always visible
 st.set_page_config(
     page_title="Rate Constant Calculation",
     page_icon="⚗️",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
-# Hide standard Streamlit menu for a seamless website look
+# --- CSS STYLING ---
+# Fixed: Removed "header {visibility: hidden;}" so you can always reopen the sidebar
 st.markdown("""
     <style>
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    header {visibility: hidden;}
-    .block-container {padding-top: 2rem; padding-bottom: 2rem;}
+    #MainMenu {visibility: hidden;} /* Hides the 3-dot menu */
+    footer {visibility: hidden;}    /* Hides the 'Made with Streamlit' footer */
+    .block-container {padding-top: 1rem; padding-bottom: 2rem;}
     </style>
     """, unsafe_allow_html=True)
 
@@ -69,15 +71,11 @@ with st.sidebar:
 # --- 3. CALCULATION ENGINE ---
 if valid_data:
     # A. Zero Order Model: Plot [A] vs t
-    # Integrated Rate Law: [A] = -kt + [A]0
-    # Slope = -k
     x0 = df["Time"]
     y0 = df["Conc"]
     reg0 = linregress(x0, y0)
     
     # B. First Order Model: Plot ln[A] vs t
-    # Integrated Rate Law: ln[A] = -kt + ln[A]0
-    # Slope = -k
     # Filter out concentration <= 0 to avoid log errors
     df_log = df[df["Conc"] > 0].copy()
     x1 = df_log["Time"]
@@ -85,8 +83,6 @@ if valid_data:
     reg1 = linregress(x1, y1)
     
     # C. Second Order Model: Plot 1/[A] vs t
-    # Integrated Rate Law: 1/[A] = kt + 1/[A]0
-    # Slope = +k
     # Filter out concentration == 0 to avoid division errors
     df_inv = df[df["Conc"] != 0].copy()
     x2 = df_inv["Time"]
@@ -176,4 +172,4 @@ if valid_data:
             st.plotly_chart(fig2, use_container_width=True)
 
 else:
-    st.info("👈 Please verify your data format in the sidebar.")
+    st.info("👈 Please enter your experimental data in the sidebar to begin.")
