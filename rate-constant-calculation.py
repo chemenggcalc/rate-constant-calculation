@@ -3,112 +3,128 @@ import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.metrics import r2_score
 
-# 1. Page Config & CSS to hide Streamlit branding
-st.set_page_config(page_title="Reaction Order Predictor", layout="wide")
+# 1. Page Config & CSS to hide Streamlit branding/footer
+st.set_page_config(page_title="Kinetic Order Solver", layout="wide")
 
+# Corrected CSS injection
 hide_style = """
     <style>
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     header {visibility: hidden;}
+    .stDeployButton {display:none;}
     </style>
     """
-st.markdown(hide_style, unsafe_base64=True)
+st.markdown(hide_style, unsafe_allow_html=True)
 
 def calculate_r2(x, y):
-    """Calculates R-squared value."""
-    if len(x) < 2: return 0
+    """Calculates R-squared value for a linear fit."""
+    if len(x) < 2: return 0.0
     # Linear regression: y = mx + c
-    coefficients = np.polyfit(x, y, 1)
-    p = np.poly1d(coefficients)
-    y_pred = p(x)
-    return r2_score(y, y_pred)
+    try:
+        coefficients = np.polyfit(x, y, 1)
+        p = np.poly1d(coefficients)
+        y_pred = p(x)
+        return r2_score(y, y_pred)
+    except:
+        return 0.0
 
 def main():
     st.title("🧪 Kinetic Best-Fit Calculator")
-    st.write("Input your experimental data below. The app will automatically determine the reaction order.")
+    st.write("Determine the reaction order and rate constant by comparing $R^2$ values across different models.")
 
-    # --- Data Input Section ---
+    # --- Data Input Section (Responsive Columns) ---
     st.subheader("Step 1: Enter Experimental Data")
     
-    # Prefilled data (Example: A typical First Order decay)
+    # Prefilled data (Example: First Order decay data)
     default_time = "0, 10, 20, 30, 40, 50"
     default_conc = "1.0, 0.707, 0.5, 0.354, 0.25, 0.177"
 
-    col1, col2 = st.columns(2)
-    with col1:
-        time_str = st.text_input("Time points (comma separated)", default_time)
-    with col2:
-        conc_str = st.text_input("Concentrations [A] (comma separated)", default_conc)
+    col_a, col_b = st.columns([1, 1])
+    with col_a:
+        time_str = st.text_input("Time points (t)", default_time, help="Separate values with commas")
+    with col_b:
+        conc_str = st.text_input("Concentration [A]", default_conc, help="Separate values with commas")
 
     try:
-        # Convert strings to numpy arrays
-        t = np.array([float(i.strip()) for i in time_str.split(",")])
-        a = np.array([float(i.strip()) for i in conc_str.split(",")])
+        # Data Cleanup
+        t = np.array([float(i.strip()) for i in time_str.split(",") if i.strip()])
+        a = np.array([float(i.strip()) for i in conc_str.split(",") if i.strip()])
 
         if len(t) != len(a):
-            st.error("Error: Time and Concentration arrays must be the same length.")
+            st.error("Error: The number of Time points and Concentration points must match.")
+            return
+        
+        if len(t) < 2:
+            st.warning("Please enter at least two data points.")
             return
 
         # --- Kinetic Transformations ---
-        # Zeroth: [A] vs t
+        # Zeroth: [A]
         r2_zero = calculate_r2(t, a)
         
-        # First: ln[A] vs t
-        r2_first = calculate_r2(t, np.log(a))
+        # First: ln[A]
+        # We use np.where to avoid log(0) errors
+        ln_a = np.log(a)
+        r2_first = calculate_r2(t, ln_a)
         
-        # Second: 1/[A] vs t
-        r2_second = calculate_r2(t, 1/a)
+        # Second: 1/[A]
+        inv_a = 1/a
+        r2_second = calculate_r2(t, inv_a)
 
-        # --- Determine Best Fit ---
-        results = {
-            "Zeroth Order ([A] vs t)": r2_zero,
-            "First Order (ln[A] vs t)": r2_first,
-            "Second Order (1/[A] vs t)": r2_second
-        }
-        best_order = max(results, key=results.get)
-
-        # --- Results Display ---
+        # --- Statistics Table ---
         st.markdown("---")
-        st.subheader("Step 2: Statistical Analysis ($R^2$)")
+        st.subheader("Step 2: Statistical Comparison ($R^2$)")
         
+        # Determine the best fit
+        scores = {
+            "Zeroth Order": r2_zero,
+            "First Order": r2_first,
+            "Second Order": r2_second
+        }
+        best_order_name = max(scores, key=scores.get)
+
         c1, c2, c3 = st.columns(3)
         c1.metric("Zeroth Order $R^2$", f"{r2_zero:.4f}")
         c2.metric("First Order $R^2$", f"{r2_first:.4f}")
         c3.metric("Second Order $R^2$", f"{r2_second:.4f}")
 
-        st.success(f"**Conclusion:** The data best fits a **{best_order}** kinetics model.")
+        st.success(f"**Best Fit Result:** The data follows **{best_order_name}** kinetics.")
 
-        # --- Visualizing the Best Fit ---
+        # --- Visualization ---
         st.markdown("---")
-        st.subheader("Step 3: Best Fit Visualization")
+        st.subheader(f"Step 3: Linearized Plot for {best_order_name}")
         
-        fig, ax = plt.subplots(figsize=(10, 4))
+        fig, ax = plt.subplots(figsize=(8, 4))
         
-        if best_order.startswith("Zeroth"):
+        if best_order_name == "Zeroth Order":
             y_plot = a
-            label_y = "Concentration [A]"
-        elif best_order.startswith("First"):
-            y_plot = np.log(a)
-            label_y = "ln([A])"
+            ylabel = "Concentration [A]"
+        elif best_order_name == "First Order":
+            y_plot = ln_a
+            ylabel = "ln([A])"
         else:
-            y_plot = 1/a
-            label_y = "1/[A]"
+            y_plot = inv_a
+            ylabel = "1/[A]"
 
-        # Plot points and regression line
+        # Regression line for plotting
         m, b = np.polyfit(t, y_plot, 1)
-        ax.scatter(t, y_plot, color='red', label='Experimental Data')
-        ax.plot(t, m*t + b, color='blue', linestyle='--', label=f'Linear Fit (k={abs(m):.4f})')
+        line = m * t + b
         
-        ax.set_xlabel("Time")
-        ax.set_ylabel(label_y)
+        ax.scatter(t, y_plot, color='#e74c3c', label='Experimental Data', s=50)
+        ax.plot(t, line, color='#2c3e50', linestyle='--', label=f'Best Fit Line (slope/k = {abs(m):.4f})')
+        
+        ax.set_xlabel("Time (t)")
+        ax.set_ylabel(ylabel)
         ax.legend()
-        ax.grid(alpha=0.3)
+        ax.grid(True, linestyle=':', alpha=0.7)
         
         st.pyplot(fig)
 
+    except ValueError:
+        st.error("Invalid Input: Please ensure all values are numbers and separated by commas.")
     except Exception as e:
-        st.warning("Please ensure your inputs are numbers separated by commas.")
+        st.error(f"An unexpected error occurred: {e}")
 
 if __name__ == "__main__":
     main()
